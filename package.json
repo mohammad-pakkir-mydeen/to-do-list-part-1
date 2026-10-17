@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "test": "bun test",
+    "test": "bun test --coverage --coverage-threshold=80",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
