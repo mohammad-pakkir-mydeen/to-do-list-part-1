@@ -13,5 +13,8 @@ build/
 
 # System and logs
 .DS_Store
-Thumbs.db
-*.log
+# SQLite databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
