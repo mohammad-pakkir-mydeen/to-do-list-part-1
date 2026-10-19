@@ -4,27 +4,33 @@ import type { ProjectItem } from "../types";
 interface ProjectSidebarProps {
   projects: ProjectItem[];
   selectedProjectId: number | "inbox" | "all";
+  currentUserId: number;
   onSelectProject: (id: number | "inbox" | "all") => void;
-  onCreateProject: (name: string) => Promise<void>;
+  onCreateProject: (name: string, isShared: boolean) => Promise<void>;
+  onSetProjectSharing: (project: ProjectItem, isShared: boolean) => Promise<void>;
   onDeleteProjectClick: (project: ProjectItem) => void;
 }
 
 export function ProjectSidebar({
   projects,
   selectedProjectId,
+  currentUserId,
   onSelectProject,
   onCreateProject,
+  onSetProjectSharing,
   onDeleteProjectClick,
 }: ProjectSidebarProps) {
   const [showInput, setShowInput] = useState(false);
   const [name, setName] = useState("");
+  const [isShared, setIsShared] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    await onCreateProject(trimmed);
+    await onCreateProject(trimmed, isShared);
     setName("");
+    setIsShared(false);
     setShowInput(false);
   };
 
@@ -50,7 +56,28 @@ export function ProjectSidebar({
             className={selectedProjectId === proj.id ? "active" : ""}
             onClick={() => onSelectProject(proj.id)}
           >
-            <span>{proj.name}</span>
+            <span>
+              {proj.name}
+              <small className="creator-label">
+                Created by {proj.creator?.name ?? "Unknown"}
+              </small>
+              <small className="creator-label">
+                {proj.isShared ? "Shared" : "Personal"}
+              </small>
+            </span>
+            {proj.userId === currentUserId && (
+              <button
+                className="project-sharing-btn"
+                type="button"
+                title={proj.isShared ? "Make project personal" : "Share project"}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSetProjectSharing(proj, !proj.isShared);
+                }}
+              >
+                {proj.isShared ? "Shared" : "Private"}
+              </button>
+            )}
             <button
               className="delete-proj-btn"
               title="Delete project"
@@ -74,6 +101,14 @@ export function ProjectSidebar({
             onChange={(e) => setName(e.target.value)}
             autoFocus
           />
+          <label className="sharing-option">
+            <input
+              type="checkbox"
+              checked={isShared}
+              onChange={(event) => setIsShared(event.target.checked)}
+            />
+            Share this project with everyone
+          </label>
           <div className="form-actions">
             <button type="submit">Add</button>
             <button type="button" onClick={() => setShowInput(false)}>
@@ -92,4 +127,3 @@ export function ProjectSidebar({
     </aside>
   );
 }
-

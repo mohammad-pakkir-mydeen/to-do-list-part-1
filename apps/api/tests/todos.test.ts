@@ -1,12 +1,27 @@
 import { describe, expect, it, beforeEach } from "bun:test";
-import { app } from "../src/app";
+import { app as api } from "../src/app";
 import { db, runMigrations } from "../src/db";
-import { todos } from "../src/db/schema";
+import { projects, sessions, todos, users } from "../src/db/schema";
+import { createTestSession, getTestUserId, withSession } from "./helpers";
+
+let sessionCookie = "";
+let userId = 0;
+const app = {
+  handle: (request: Request) =>
+    api.handle(withSession(request, sessionCookie)),
+};
+const handleWithCookie = (request: Request, cookie: string) =>
+  api.handle(withSession(request, cookie));
 
 describe("To-Do API", () => {
   beforeEach(async () => {
     runMigrations();
     await db.delete(todos);
+    await db.delete(projects);
+    await db.delete(sessions);
+    await db.delete(users);
+    sessionCookie = await createTestSession();
+    userId = await getTestUserId(sessionCookie);
   });
 
   describe("POST /todos", () => {
@@ -51,8 +66,8 @@ describe("To-Do API", () => {
   describe("GET /todos", () => {
     it("returns list of todos", async () => {
       await db.insert(todos).values([
-        { title: "Task 1", completed: false },
-        { title: "Task 2", completed: true },
+        { title: "Task 1", completed: false, userId },
+        { title: "Task 2", completed: true, userId },
       ]);
 
       const response = await app.handle(new Request("http://localhost/todos"));
@@ -63,8 +78,8 @@ describe("To-Do API", () => {
 
     it("filters by active todos", async () => {
       await db.insert(todos).values([
-        { title: "Active task", completed: false },
-        { title: "Done task", completed: true },
+        { title: "Active task", completed: false, userId },
+        { title: "Done task", completed: true, userId },
       ]);
 
       const response = await app.handle(
@@ -79,8 +94,8 @@ describe("To-Do API", () => {
 
     it("filters by completed todos", async () => {
       await db.insert(todos).values([
-        { title: "Active task", completed: false },
-        { title: "Done task", completed: true },
+        { title: "Active task", completed: false, userId },
+        { title: "Done task", completed: true, userId },
       ]);
 
       const response = await app.handle(
@@ -95,8 +110,8 @@ describe("To-Do API", () => {
 
     it("returns all todos when filter=all", async () => {
       await db.insert(todos).values([
-        { title: "Active task", completed: false },
-        { title: "Done task", completed: true },
+        { title: "Active task", completed: false, userId },
+        { title: "Done task", completed: true, userId },
       ]);
 
       const response = await app.handle(
@@ -112,7 +127,7 @@ describe("To-Do API", () => {
     it("edits the todo title", async () => {
       const [inserted] = await db
         .insert(todos)
-        .values({ title: "Original title", completed: false })
+        .values({ title: "Original title", completed: false, userId })
         .returning();
 
       const response = await app.handle(
@@ -132,7 +147,7 @@ describe("To-Do API", () => {
     it("completes and reactivates a todo", async () => {
       const [inserted] = await db
         .insert(todos)
-        .values({ title: "Toggle me", completed: false })
+        .values({ title: "Toggle me", completed: false, userId })
         .returning();
 
       // Complete
@@ -174,7 +189,7 @@ describe("To-Do API", () => {
     it("returns 400 when title is empty string", async () => {
       const [inserted] = await db
         .insert(todos)
-        .values({ title: "Valid title", completed: false })
+        .values({ title: "Valid title", completed: false, userId })
         .returning();
 
       const response = await app.handle(
@@ -192,7 +207,7 @@ describe("To-Do API", () => {
     it("deletes a todo by id", async () => {
       const [inserted] = await db
         .insert(todos)
-        .values({ title: "To be deleted", completed: false })
+        .values({ title: "To be deleted", completed: false, userId })
         .returning();
 
       const response = await app.handle(
@@ -223,9 +238,9 @@ describe("To-Do API", () => {
   describe("DELETE /todos/completed (clear completed)", () => {
     it("deletes all completed todos and preserves active ones", async () => {
       await db.insert(todos).values([
-        { title: "Active 1", completed: false },
-        { title: "Done 1", completed: true },
-        { title: "Done 2", completed: true },
+        { title: "Active 1", completed: false, userId },
+        { title: "Done 1", completed: true, userId },
+        { title: "Done 2", completed: true, userId },
       ]);
 
       const response = await app.handle(
@@ -241,6 +256,107 @@ describe("To-Do API", () => {
       const remaining = await db.select().from(todos);
       expect(remaining.length).toBe(1);
       expect(remaining[0].title).toBe("Active 1");
+    });
+  });
+
+  describe("personal and shared visibility", () => {
+    it("keeps todos in personal projects private even when sharing is requested", async () => {
+      const projectResponse = await app.handle(
+        new Request("http://localhost/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Personal project" }),
+        })
+      );
+      const project = await projectResponse.json();
+      const todoResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "Private project task",
+            projectId: project.id,
+            isShared: true,
+          }),
+        })
+      );
+      const todo = await todoResponse.json();
+      expect(todoResponse.status).toBe(201);
+      expect(todo.isShared).toBe(false);
+
+      const otherCookie = await createTestSession();
+      const otherList = await handleWithCookie(
+        new Request("http://localhost/todos"),
+        otherCookie
+      );
+      expect(await otherList.json()).toEqual([]);
+
+      const otherUpdate = await handleWithCookie(
+        new Request(`http://localhost/todos/${todo.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Should be hidden" }),
+        }),
+        otherCookie
+      );
+      expect(otherUpdate.status).toBe(404);
+
+      const otherDelete = await handleWithCookie(
+        new Request(`http://localhost/todos/${todo.id}`, {
+          method: "DELETE",
+        }),
+        otherCookie
+      );
+      expect(otherDelete.status).toBe(404);
+    });
+
+    it("makes an existing shared todo personal when it is moved to a personal project", async () => {
+      const projectResponse = await app.handle(
+        new Request("http://localhost/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Personal project" }),
+        })
+      );
+      const project = await projectResponse.json();
+      const todoResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Shared task", isShared: true }),
+        })
+      );
+      const todo = await todoResponse.json();
+
+      const updateResponse = await app.handle(
+        new Request(`http://localhost/todos/${todo.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: project.id, isShared: true }),
+        })
+      );
+      expect(updateResponse.status).toBe(200);
+      expect((await updateResponse.json()).isShared).toBe(false);
+    });
+
+    it("shows a shared inbox todo to another signed-in user", async () => {
+      const createResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Shared task", isShared: true }),
+        })
+      );
+      expect(createResponse.status).toBe(201);
+
+      const otherCookie = await createTestSession();
+      const otherList = await handleWithCookie(
+        new Request("http://localhost/todos"),
+        otherCookie
+      );
+      expect(await otherList.json()).toMatchObject([
+        { title: "Shared task", isShared: true },
+      ]);
     });
   });
 });

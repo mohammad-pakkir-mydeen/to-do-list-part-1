@@ -260,6 +260,151 @@ body {
   border-bottom: 1px solid #ffbaba;
 }
 
+.auth-screen {
+  width: 100%;
+  min-height: calc(100vh - 80px);
+  display: grid;
+  place-items: center;
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  padding: 32px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.auth-card h1 {
+  color: #b83f45;
+  font-size: 28px;
+  font-weight: 400;
+}
+
+.auth-intro {
+  color: #666;
+  margin: 8px 0 24px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+  color: #444;
+  font-size: 14px;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.auth-form button,
+.signed-in-bar button {
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: #b83f45;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.auth-form button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.auth-switch {
+  margin-top: 20px;
+  color: #555;
+  text-align: center;
+}
+
+.auth-switch button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #b83f45;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-notice {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: #e9f6e9;
+  color: #246b2b;
+  font-size: 14px;
+}
+
+.auth-loading {
+  min-height: calc(100vh - 80px);
+}
+
+.signed-in-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #555;
+  font-size: 14px;
+  border-bottom: 1px solid #ededed;
+}
+
+.creator-label {
+  display: block;
+  margin-top: 3px;
+  color: #888;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.sharing-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: #555;
+  font-size: 13px;
+}
+
+.sharing-option input {
+  width: auto;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.todo-sharing-option {
+  padding: 4px 16px 10px;
+}
+
+.project-sharing-btn,
+.todo-sharing-btn {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #666;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.todo-sharing-btn {
+  margin: 0 8px;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;
