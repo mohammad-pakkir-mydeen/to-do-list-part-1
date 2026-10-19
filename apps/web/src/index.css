@@ -324,3 +324,102 @@ body {
   background: #e0e0e0;
   color: #333;
 }
+
+/* Authentication Bar & Controls */
+.auth-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fdfdfd;
+  border-bottom: 1px solid #ededed;
+}
+
+.auth-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: #444;
+}
+
+.auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-btn-primary {
+  padding: 6px 14px;
+  background: #b83f45;
+  color: #fff;
+  border: 1px solid #b83f45;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-btn-primary:hover {
+  background: #a33238;
+}
+
+.auth-btn-secondary {
+  padding: 6px 14px;
+  background: #fff;
+  color: #555;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.auth-btn-secondary:hover {
+  background: #f4f4f4;
+  color: #111;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.auth-form input {
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  outline: none;
+}
+
+.auth-form input:focus {
+  border-color: #b83f45;
+}
+
+/* Creator Attribution Badges */
+.creator-tag {
+  font-size: 12px;
+  color: #888;
+  margin-left: 8px;
+  font-weight: normal;
+  font-style: italic;
+}
+
+.project-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proj-creator-tag {
+  font-size: 11px;
+  color: #888;
+  background: #eee;
+  padding: 1px 5px;
+  border-radius: 10px;
+  font-weight: normal;
+}

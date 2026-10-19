@@ -64,7 +64,12 @@ export function TodoItemRow({
             checked={todo.completed}
             onChange={() => onToggleComplete(todo)}
           />
-          <label onDoubleClick={handleStartEdit}>{todo.title}</label>
+          <label onDoubleClick={handleStartEdit}>
+            {todo.title}
+            {todo.creator && (
+              <span className="creator-tag">by @{todo.creator.username}</span>
+            )}
+          </label>
           <button
             className="destroy"
             onClick={() => onDelete(todo.id)}

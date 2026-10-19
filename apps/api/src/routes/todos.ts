@@ -1,22 +1,28 @@
 import { Elysia, t } from "elysia";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
-import { todos } from "../db/schema";
+import { todos, users } from "../db/schema";
+import { authContext } from "../auth";
 
 export const todosRoutes = new Elysia({ prefix: "/todos" })
+  .use(authContext)
   .post(
     "/",
-    async ({ body, set }) => {
+    async ({ body, user, set }) => {
       const [newTodo] = await db
         .insert(todos)
         .values({
           title: body.title.trim(),
           projectId: body.projectId ?? null,
+          userId: user?.id ?? null,
         })
         .returning();
 
       set.status = 201;
-      return newTodo;
+      return {
+        ...newTodo,
+        creator: user ? { id: user.id, username: user.username } : null,
+      };
     },
     {
       body: t.Object({
@@ -45,14 +51,22 @@ export const todosRoutes = new Elysia({ prefix: "/todos" })
         }
       }
 
-      if (conditions.length > 0) {
-        return db
-          .select()
-          .from(todos)
-          .where(and(...conditions));
-      }
+      const rows = await db
+        .select({
+          todo: todos,
+          creator: {
+            id: users.id,
+            username: users.username,
+          },
+        })
+        .from(todos)
+        .leftJoin(users, eq(todos.userId, users.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
 
-      return db.select().from(todos);
+      return rows.map(({ todo, creator }) => ({
+        ...todo,
+        creator: creator && creator.id ? creator : null,
+      }));
     },
     {
       query: t.Optional(
@@ -142,6 +156,3 @@ export const todosRoutes = new Elysia({ prefix: "/todos" })
       }),
     }
   );
-
-
-

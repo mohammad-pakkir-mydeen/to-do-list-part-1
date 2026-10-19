@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./lib/api";
-import type { Filter, ProjectItem, TodoItem } from "./types";
+import type { Filter, ProjectItem, TodoItem, UserItem } from "./types";
 import { ProjectSidebar } from "./components/ProjectSidebar";
 import { TodoItemRow } from "./components/TodoItemRow";
 import { TodoFooter } from "./components/TodoFooter";
 import { DeleteProjectModal } from "./components/DeleteProjectModal";
+import { AuthHeader } from "./components/AuthHeader";
 
 export function App() {
+  const [currentUser, setCurrentUser] = useState<UserItem | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | "inbox" | "all">("all");
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -15,6 +17,65 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState<ProjectItem | null>(null);
+
+  const fetchCurrentUser = async () => {
+    try {
+      const { data, error: apiError } = await api.auth.me.get();
+      if (!apiError && data && "user" in data && data.user) {
+        setCurrentUser(data.user as UserItem);
+      } else {
+        setCurrentUser(null);
+      }
+    } catch {
+      setCurrentUser(null);
+    }
+  };
+
+  const handleLogin = async (username: string, password: string) => {
+    try {
+      const { data, error: apiError } = await api.auth.login.post({ username, password });
+      if (apiError) {
+        const msg = typeof apiError.value === "string" ? apiError.value : (apiError.value as any)?.message || "Login failed";
+        return { success: false, error: msg };
+      }
+      if (data && "user" in data) {
+        setCurrentUser(data.user as UserItem);
+        await fetchProjects();
+        await fetchTodos();
+        return { success: true };
+      }
+      return { success: false, error: "Unexpected response" };
+    } catch {
+      return { success: false, error: "Network error during login" };
+    }
+  };
+
+  const handleRegister = async (username: string, password: string) => {
+    try {
+      const { data, error: apiError } = await api.auth.register.post({ username, password });
+      if (apiError) {
+        const msg = typeof apiError.value === "string" ? apiError.value : (apiError.value as any)?.message || "Registration failed";
+        return { success: false, error: msg };
+      }
+      if (data && "user" in data) {
+        // Automatically login or set user
+        return await handleLogin(username, password);
+      }
+      return { success: false, error: "Registration failed" };
+    } catch {
+      return { success: false, error: "Network error during registration" };
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.auth.logout.post();
+    } finally {
+      setCurrentUser(null);
+      await fetchProjects();
+      await fetchTodos();
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -59,6 +120,7 @@ export function App() {
   };
 
   useEffect(() => {
+    fetchCurrentUser();
     fetchProjects();
   }, []);
 
@@ -217,6 +279,13 @@ export function App() {
       />
 
       <main className="todo-app">
+        <AuthHeader
+          currentUser={currentUser}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          onLogout={handleLogout}
+        />
+
         <header className="header">
           <h1>{currentProjectName}</h1>
           <form onSubmit={handleAddTodo}>

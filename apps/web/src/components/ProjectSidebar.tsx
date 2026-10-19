@@ -50,7 +50,12 @@ export function ProjectSidebar({
             className={selectedProjectId === proj.id ? "active" : ""}
             onClick={() => onSelectProject(proj.id)}
           >
-            <span>{proj.name}</span>
+            <span className="project-title">
+              {proj.name}
+              {proj.creator && (
+                <span className="proj-creator-tag">@{proj.creator.username}</span>
+              )}
+            </span>
             <button
               className="delete-proj-btn"
               title="Delete project"

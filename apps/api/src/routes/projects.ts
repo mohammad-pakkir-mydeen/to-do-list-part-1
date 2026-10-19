@@ -1,21 +1,28 @@
 import { Elysia, t } from "elysia";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { projects, todos } from "../db/schema";
+import { projects, todos, users } from "../db/schema";
+import { authContext } from "../auth";
 
 export const projectsRoutes = new Elysia({ prefix: "/projects" })
+  .use(authContext)
   .post(
     "/",
-    async ({ body, set }) => {
+    async ({ body, user, set }) => {
       const [newProject] = await db
         .insert(projects)
         .values({
           name: body.name.trim(),
+          userId: user?.id ?? null,
         })
         .returning();
 
       set.status = 201;
-      return newProject;
+
+      return {
+        ...newProject,
+        creator: user ? { id: user.id, username: user.username } : null,
+      };
     },
     {
       body: t.Object({
@@ -24,7 +31,21 @@ export const projectsRoutes = new Elysia({ prefix: "/projects" })
     }
   )
   .get("/", async () => {
-    return db.select().from(projects);
+    const rows = await db
+      .select({
+        project: projects,
+        creator: {
+          id: users.id,
+          username: users.username,
+        },
+      })
+      .from(projects)
+      .leftJoin(users, eq(projects.userId, users.id));
+
+    return rows.map(({ project, creator }) => ({
+      ...project,
+      creator: creator && creator.id ? creator : null,
+    }));
   })
   .delete(
     "/:id",
@@ -71,4 +92,3 @@ export const projectsRoutes = new Elysia({ prefix: "/projects" })
       ),
     }
   );
-
