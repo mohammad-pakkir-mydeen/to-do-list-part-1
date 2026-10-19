@@ -69,5 +69,22 @@ describe("database migrations", () => {
       .get() as { is_shared: number };
     expect(projectsAfterMigration.is_shared).toBe(1);
     expect(todosAfterMigration.is_shared).toBe(1);
+
+    const todoColumns = sqlite
+      .query("PRAGMA table_info(todos)")
+      .all() as Array<{ name: string }>;
+    expect(todoColumns.some(({ name }) => name === "parent_todo_id")).toBe(true);
+    const commentTable = sqlite
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'todo_comments'"
+      )
+      .get() as { name: string } | null;
+    expect(commentTable?.name).toBe("todo_comments");
+    const parentForeignKey = sqlite
+      .query("PRAGMA foreign_key_list(todos)")
+      .all() as Array<{ from: string; on_delete: string }>;
+    expect(
+      parentForeignKey.find(({ from }) => from === "parent_todo_id")?.on_delete
+    ).toBe("CASCADE");
   });
 });

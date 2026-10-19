@@ -15,8 +15,20 @@ export interface TodoItem {
   completed: boolean;
   projectId: number | null;
   isShared: boolean;
+  parentTodoId: number | null;
   createdAt: string;
   creator: CreatorItem | null;
+  subtasks?: TodoItem[];
+}
+
+export interface TodoCommentItem {
+  id: number;
+  todoId: number;
+  userId: number;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  author: CreatorItem;
 }
 
 export interface CreatorItem {

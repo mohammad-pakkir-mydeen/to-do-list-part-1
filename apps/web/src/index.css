@@ -167,6 +167,10 @@ body {
   align-items: center;
 }
 
+.todo-list > .todo-row {
+  display: block;
+}
+
 .todo-list li .view {
   display: flex;
   align-items: center;
@@ -403,6 +407,136 @@ body {
 
 .todo-sharing-btn {
   margin: 0 8px;
+}
+
+.todo-extra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 10px 52px;
+  color: #777;
+  font-size: 12px;
+}
+
+.todo-action-btn,
+.comment-actions button,
+.comment-form button,
+.subtask-form button {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #555;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.todo-action-btn:hover,
+.comment-actions button:hover,
+.comment-form button:hover,
+.subtask-form button:hover {
+  background: #f4f4f4;
+}
+
+.subtask-progress {
+  font-weight: 600;
+}
+
+.subtask-list {
+  list-style: none;
+  margin: 0 16px 8px 52px;
+  border-left: 2px solid #eee;
+}
+
+.subtask-list .subtask-row {
+  display: block;
+  border-bottom: 0;
+  font-size: 15px;
+}
+
+.subtask-row .view {
+  padding: 6px 10px;
+}
+
+.subtask-row .toggle {
+  transform: scale(0.85);
+}
+
+.subtask-form {
+  display: flex;
+  gap: 8px;
+  margin: 0 16px 10px 52px;
+}
+
+.subtask-form input,
+.comment-form textarea,
+.comment textarea {
+  min-width: 0;
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.todo-comments {
+  margin: 0 16px 12px 52px;
+  padding: 10px;
+  border-radius: 6px;
+  background: #fafafa;
+  font-size: 13px;
+}
+
+.comment-list {
+  list-style: none;
+}
+
+.comment {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.comment-heading,
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.comment-heading time,
+.no-comments {
+  color: #888;
+  font-size: 11px;
+}
+
+.comment > p {
+  margin: 5px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-actions {
+  margin-top: 6px;
+}
+
+.comment-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.comment-form textarea,
+.comment textarea {
+  min-height: 54px;
+  resize: vertical;
+}
+
+.comment-error {
+  margin-bottom: 6px;
+  color: #b83f45;
+  font-size: 12px;
 }
 
 /* Modal */
