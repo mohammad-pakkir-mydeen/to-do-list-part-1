@@ -1,7 +1,9 @@
 import { Elysia } from "elysia";
+import { cors } from "@elysiajs/cors";
 import { todosRoutes } from "./routes/todos";
 
 export const app = new Elysia()
+  .use(cors())
   .onError(({ code, set }) => {
     if (code === "VALIDATION") {
       set.status = 400;
@@ -10,3 +12,4 @@ export const app = new Elysia()
   })
   .get("/health", () => ({ status: "ok" }))
   .use(todosRoutes);
+

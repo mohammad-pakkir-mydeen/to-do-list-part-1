@@ -1,21 +1,18 @@
 {
-  "name": "todo-api",
+  "name": "todo-monorepo",
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "bun run --watch src/index.ts",
-    "test": "bun test --coverage --coverage-threshold=80",
-    "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
-  },
-  "dependencies": {
-    "drizzle-orm": "^0.45.4",
-    "elysia": "^1.4.30"
+    "dev:api": "bun --filter @todo/api dev",
+    "dev:web": "bun --filter @todo/web dev",
+    "test": "bun --filter @todo/api test",
+    "typecheck": "bun --filter '*' typecheck",
+    "build": "bun --filter @todo/web build"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3",
-    "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.2"
   }
 }
