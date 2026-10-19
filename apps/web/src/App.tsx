@@ -1,20 +1,94 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./lib/api";
-import type { Filter, ProjectItem, TodoItem } from "./types";
+import type { Filter, ProjectItem, TodoItem, UserItem } from "./types";
 import { ProjectSidebar } from "./components/ProjectSidebar";
 import { TodoItemRow } from "./components/TodoItemRow";
 import { TodoFooter } from "./components/TodoFooter";
 import { DeleteProjectModal } from "./components/DeleteProjectModal";
+import { AuthScreen } from "./components/AuthScreen";
 
 export function App() {
+  const [currentUser, setCurrentUser] = useState<UserItem | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | "inbox" | "all">("all");
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [newTodoIsShared, setNewTodoIsShared] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [inputTitle, setInputTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState<ProjectItem | null>(null);
+
+  const getErrorMessage = (value: unknown, fallback: string) => {
+    if (typeof value === "string") return value;
+    if (typeof value === "object" && value !== null && "message" in value) {
+      return typeof value.message === "string" ? value.message : fallback;
+    }
+    return fallback;
+  };
+
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      const { data, error: apiError } = await api.auth.login.post({
+        email,
+        password,
+      });
+      if (apiError) {
+        return {
+          success: false,
+          error: getErrorMessage(apiError.value, "Sign-in failed"),
+        };
+      }
+      if (!data || !("user" in data) || !data.user) {
+        return { success: false, error: "Unexpected sign-in response" };
+      }
+
+      setCurrentUser(data.user);
+      setAuthError(null);
+      setError(null);
+      await fetchProjects();
+      return { success: true };
+    } catch {
+      return { success: false, error: "Cannot reach the authentication service" };
+    }
+  };
+
+  const handleSignup = async (name: string, email: string, password: string) => {
+    try {
+      const { data, error: apiError } = await api.auth.signup.post({
+        name,
+        email,
+        password,
+      });
+      if (apiError) {
+        return {
+          success: false,
+          error: getErrorMessage(apiError.value, "Sign-up failed"),
+        };
+      }
+      return data && "user" in data
+        ? { success: true }
+        : { success: false, error: "Unexpected sign-up response" };
+    } catch {
+      return { success: false, error: "Cannot reach the authentication service" };
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const { error: apiError } = await api.auth.logout.post();
+      if (apiError) setAuthError("Could not confirm sign-out. Please try again.");
+    } catch {
+      setAuthError("Could not reach the server to sign out.");
+    } finally {
+      setCurrentUser(null);
+      setProjects([]);
+      setTodos([]);
+      setError(null);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -59,16 +133,34 @@ export function App() {
   };
 
   useEffect(() => {
-    fetchProjects();
+    let active = true;
+    const restoreSession = async () => {
+      try {
+        const { data } = await api.auth.me.get();
+        if (active && data && "user" in data && data.user) {
+          setCurrentUser(data.user);
+          await fetchProjects();
+        }
+      } catch {
+        if (active) setCurrentUser(null);
+      } finally {
+        if (active) setAuthLoading(false);
+      }
+    };
+
+    restoreSession();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    fetchTodos();
-  }, [filter, selectedProjectId]);
+    if (currentUser) fetchTodos();
+  }, [filter, selectedProjectId, currentUser]);
 
-  const handleCreateProject = async (name: string) => {
+  const handleCreateProject = async (name: string, isShared: boolean) => {
     try {
-      const { data, error: apiError } = await api.projects.post({ name });
+      const { data, error: apiError } = await api.projects.post({ name, isShared });
       if (apiError) {
         setError("Failed to create project.");
         return;
@@ -79,6 +171,25 @@ export function App() {
       }
     } catch {
       setError("Error creating project.");
+    }
+  };
+
+  const handleSetProjectSharing = async (
+    project: ProjectItem,
+    isShared: boolean
+  ) => {
+    try {
+      const { error: apiError } = await api.projects({ id: project.id }).patch({
+        isShared,
+      });
+      if (apiError) {
+        setError("Only the project owner can change its sharing setting.");
+        return;
+      }
+      await fetchProjects();
+      await fetchTodos();
+    } catch {
+      setError("Error updating project sharing.");
     }
   };
 
@@ -112,8 +223,13 @@ export function App() {
     if (!trimmed) return;
 
     try {
-      const payload: { title: string; projectId?: number | null } = {
+      const payload: {
+        title: string;
+        projectId?: number | null;
+        isShared: boolean;
+      } = {
         title: trimmed,
+        isShared: newTodoIsShared,
       };
 
       if (typeof selectedProjectId === "number") {
@@ -129,6 +245,7 @@ export function App() {
 
       if (data) {
         setInputTitle("");
+        setNewTodoIsShared(false);
         fetchTodos();
       }
     } catch {
@@ -150,6 +267,21 @@ export function App() {
       fetchTodos();
     } catch {
       setError("Error updating todo.");
+    }
+  };
+
+  const handleSetTodoSharing = async (todo: TodoItem, isShared: boolean) => {
+    try {
+      const { error: apiError } = await api.todos({ id: todo.id }).patch({
+        isShared,
+      });
+      if (apiError) {
+        setError("Failed to update to-do sharing.");
+        return;
+      }
+      await fetchTodos();
+    } catch {
+      setError("Error updating to-do sharing.");
     }
   };
 
@@ -199,24 +331,48 @@ export function App() {
   const activeCount = todos.filter((t) => !t.completed).length;
   const completedCount = todos.filter((t) => t.completed).length;
 
+  if (authLoading) {
+    return <div className="loading-state auth-loading">Checking your session...</div>;
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        initialError={authError}
+        onLogin={handleLogin}
+        onSignup={handleSignup}
+      />
+    );
+  }
+
   const currentProjectName =
     selectedProjectId === "all"
       ? "All Tasks"
       : selectedProjectId === "inbox"
       ? "Inbox"
       : projects.find((p) => p.id === selectedProjectId)?.name || "Project";
+  const selectedProjectIsPersonal =
+    typeof selectedProjectId === "number" &&
+    projects.find((project) => project.id === selectedProjectId)?.isShared ===
+      false;
 
   return (
     <div className="layout">
       <ProjectSidebar
         projects={projects}
         selectedProjectId={selectedProjectId}
+        currentUserId={currentUser.id}
         onSelectProject={setSelectedProjectId}
         onCreateProject={handleCreateProject}
+        onSetProjectSharing={handleSetProjectSharing}
         onDeleteProjectClick={setDeletingProject}
       />
 
       <main className="todo-app">
+        <div className="signed-in-bar">
+          <span>Signed in as <strong>{currentUser.name}</strong></span>
+          <button type="button" onClick={handleLogout}>Sign out</button>
+        </div>
         <header className="header">
           <h1>{currentProjectName}</h1>
           <form onSubmit={handleAddTodo}>
@@ -231,6 +387,17 @@ export function App() {
               onChange={(e) => setInputTitle(e.target.value)}
               autoFocus
             />
+            <label className="sharing-option todo-sharing-option">
+              <input
+                type="checkbox"
+                checked={!selectedProjectIsPersonal && newTodoIsShared}
+                disabled={selectedProjectIsPersonal}
+                onChange={(event) => setNewTodoIsShared(event.target.checked)}
+              />
+              {selectedProjectIsPersonal
+                ? "To-dos in personal projects are always personal"
+                : "Share this to-do with everyone"}
+            </label>
           </form>
         </header>
 
@@ -247,7 +414,9 @@ export function App() {
                 <TodoItemRow
                   key={todo.id}
                   todo={todo}
+                  currentUserId={currentUser.id}
                   onToggleComplete={handleToggleComplete}
+                  onSetSharing={handleSetTodoSharing}
                   onSaveEdit={handleSaveEdit}
                   onDelete={handleDeleteTodo}
                 />

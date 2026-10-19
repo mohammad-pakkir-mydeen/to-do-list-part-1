@@ -1,13 +1,28 @@
 import { describe, expect, it, beforeEach } from "bun:test";
-import { app } from "../src/app";
+import { eq } from "drizzle-orm";
+import { app as api } from "../src/app";
 import { db, runMigrations } from "../src/db";
-import { projects, todos } from "../src/db/schema";
+import { projects, sessions, todos, users } from "../src/db/schema";
+import { createTestSession, getTestUserId, withSession } from "./helpers";
+
+let sessionCookie = "";
+let userId = 0;
+const app = {
+  handle: (request: Request) =>
+    api.handle(withSession(request, sessionCookie)),
+};
+const handleWithCookie = (request: Request, cookie: string) =>
+  api.handle(withSession(request, cookie));
 
 describe("Projects API", () => {
   beforeEach(async () => {
     runMigrations();
     await db.delete(todos);
     await db.delete(projects);
+    await db.delete(sessions);
+    await db.delete(users);
+    sessionCookie = await createTestSession();
+    userId = await getTestUserId(sessionCookie);
   });
 
   describe("POST /projects", () => {
@@ -51,8 +66,8 @@ describe("Projects API", () => {
   describe("GET /projects", () => {
     it("returns list of projects", async () => {
       await db.insert(projects).values([
-        { name: "Personal" },
-        { name: "Work" },
+        { name: "Personal", userId },
+        { name: "Work", userId },
       ]);
 
       const response = await app.handle(new Request("http://localhost/projects"));
@@ -60,23 +75,107 @@ describe("Projects API", () => {
       const data = await response.json();
       expect(data.length).toBe(2);
     });
+
+    it("only lists personal projects to their owner and lists shared projects to everyone", async () => {
+      const privateResponse = await app.handle(
+        new Request("http://localhost/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Private project" }),
+        })
+      );
+      const privateProject = await privateResponse.json();
+      const sharedResponse = await app.handle(
+        new Request("http://localhost/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Shared project", isShared: true }),
+        })
+      );
+      const sharedProject = await sharedResponse.json();
+      const otherCookie = await createTestSession();
+
+      const listResponse = await handleWithCookie(
+        new Request("http://localhost/projects"),
+        otherCookie
+      );
+      expect(await listResponse.json()).toMatchObject([
+        { id: sharedProject.id, isShared: true },
+      ]);
+
+      const privatePatch = await handleWithCookie(
+        new Request(`http://localhost/projects/${privateProject.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Not visible" }),
+        }),
+        otherCookie
+      );
+      expect(privatePatch.status).toBe(404);
+
+      const privateDelete = await handleWithCookie(
+        new Request(`http://localhost/projects/${privateProject.id}`, {
+          method: "DELETE",
+        }),
+        otherCookie
+      );
+      expect(privateDelete.status).toBe(404);
+    });
+
+    it("makes project todos personal when a shared project becomes personal", async () => {
+      const projectResponse = await app.handle(
+        new Request("http://localhost/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Project", isShared: true }),
+        })
+      );
+      const project = await projectResponse.json();
+      const todoResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "Shared task",
+            projectId: project.id,
+            isShared: true,
+          }),
+        })
+      );
+      const todo = await todoResponse.json();
+
+      const updateResponse = await app.handle(
+        new Request(`http://localhost/projects/${project.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isShared: false }),
+        })
+      );
+      expect(updateResponse.status).toBe(200);
+
+      const [updatedTodo] = await db
+        .select()
+        .from(todos)
+        .where(eq(todos.id, todo.id));
+      expect(updatedTodo.isShared).toBe(false);
+    });
   });
 
   describe("DELETE /projects/:id (Deletion behavior)", () => {
     it("moves todos to Inbox when deleteTodos=false (move_to_inbox)", async () => {
       const [project] = await db
         .insert(projects)
-        .values({ name: "To delete" })
+        .values({ name: "To delete", userId })
         .returning();
 
       const [todo1] = await db
         .insert(todos)
-        .values({ title: "Task 1", projectId: project.id })
+        .values({ title: "Task 1", projectId: project.id, userId })
         .returning();
 
       const [todo2] = await db
         .insert(todos)
-        .values({ title: "Task 2", projectId: project.id })
+        .values({ title: "Task 2", projectId: project.id, userId })
         .returning();
 
       const response = await app.handle(
@@ -104,14 +203,14 @@ describe("Projects API", () => {
     it("deletes its todos when deleteTodos=true (cascade)", async () => {
       const [project] = await db
         .insert(projects)
-        .values({ name: "To delete" })
+        .values({ name: "To delete", userId })
         .returning();
 
       await db
         .insert(todos)
         .values([
-          { title: "Task A", projectId: project.id },
-          { title: "Task B", projectId: project.id },
+          { title: "Task A", projectId: project.id, userId },
+          { title: "Task B", projectId: project.id, userId },
         ]);
 
       const response = await app.handle(
@@ -145,7 +244,7 @@ describe("Projects API", () => {
     it("handles deleting an empty project without error", async () => {
       const [project] = await db
         .insert(projects)
-        .values({ name: "Empty Project" })
+        .values({ name: "Empty Project", userId })
         .returning();
 
       const response = await app.handle(
@@ -161,7 +260,7 @@ describe("Projects API", () => {
     it("creates a todo with a projectId", async () => {
       const [project] = await db
         .insert(projects)
-        .values({ name: "Work" })
+        .values({ name: "Work", userId })
         .returning();
 
       const response = await app.handle(
@@ -180,12 +279,12 @@ describe("Projects API", () => {
     it("filters todos by projectId or inbox", async () => {
       const [project] = await db
         .insert(projects)
-        .values({ name: "Work" })
+        .values({ name: "Work", userId })
         .returning();
 
       await db.insert(todos).values([
-        { title: "Inbox task", projectId: null },
-        { title: "Project task", projectId: project.id },
+        { title: "Inbox task", projectId: null, userId },
+        { title: "Project task", projectId: project.id, userId },
       ]);
 
       // Query inbox (null projectId)
@@ -208,4 +307,3 @@ describe("Projects API", () => {
     });
   });
 });
-
