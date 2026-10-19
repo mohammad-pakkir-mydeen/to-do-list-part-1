@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from "bun:test";
+import { eq } from "drizzle-orm";
 import { app as api } from "../src/app";
 import { db, runMigrations } from "../src/db";
 import { projects, sessions, todos, users } from "../src/db/schema";
@@ -357,6 +358,218 @@ describe("To-Do API", () => {
       expect(await otherList.json()).toMatchObject([
         { title: "Shared task", isShared: true },
       ]);
+    });
+  });
+
+  describe("todo comments", () => {
+    it("allows visible users to comment but only authors to edit or delete", async () => {
+      const todoResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Shared task", isShared: true }),
+        })
+      );
+      const todo = await todoResponse.json();
+      const otherCookie = await createTestSession();
+      const createResponse = await handleWithCookie(
+        new Request(`http://localhost/todos/${todo.id}/comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: "A useful note" }),
+        }),
+        otherCookie
+      );
+      expect(createResponse.status).toBe(201);
+      const comment = await createResponse.json();
+
+      const visibleComments = await app.handle(
+        new Request(`http://localhost/todos/${todo.id}/comments`)
+      );
+      expect(await visibleComments.json()).toMatchObject([
+        { id: comment.id, body: "A useful note" },
+      ]);
+
+      const forbiddenEdit = await app.handle(
+        new Request(
+          `http://localhost/todos/${todo.id}/comments/${comment.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: "Changed by someone else" }),
+          }
+        )
+      );
+      expect(forbiddenEdit.status).toBe(404);
+
+      const forbiddenDelete = await app.handle(
+        new Request(
+          `http://localhost/todos/${todo.id}/comments/${comment.id}`,
+          { method: "DELETE" }
+        )
+      );
+      expect(forbiddenDelete.status).toBe(404);
+
+      const authorEdit = await handleWithCookie(
+        new Request(
+          `http://localhost/todos/${todo.id}/comments/${comment.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: "Edited by author" }),
+          }
+        ),
+        otherCookie
+      );
+      expect(authorEdit.status).toBe(200);
+      expect((await authorEdit.json()).body).toBe("Edited by author");
+
+      const authorDelete = await handleWithCookie(
+        new Request(
+          `http://localhost/todos/${todo.id}/comments/${comment.id}`,
+          { method: "DELETE" }
+        ),
+        otherCookie
+      );
+      expect(authorDelete.status).toBe(200);
+    });
+
+    it("hides comments endpoints when the todo is not visible", async () => {
+      const todoResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Personal task" }),
+        })
+      );
+      const todo = await todoResponse.json();
+      const otherCookie = await createTestSession();
+
+      const response = await handleWithCookie(
+        new Request(`http://localhost/todos/${todo.id}/comments`),
+        otherCookie
+      );
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe("subtasks", () => {
+    it("returns one level of subtasks and enforces visibility inherited from the parent", async () => {
+      const parentResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Parent task", isShared: true }),
+        })
+      );
+      const parent = await parentResponse.json();
+      const childResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "Subtask",
+            parentTodoId: parent.id,
+          }),
+        })
+      );
+      expect(childResponse.status).toBe(201);
+      const child = await childResponse.json();
+      expect(child.parentTodoId).toBe(parent.id);
+      expect(child.isShared).toBe(true);
+
+      const listResponse = await app.handle(new Request("http://localhost/todos"));
+      expect(await listResponse.json()).toMatchObject([
+        { id: parent.id, subtasks: [{ id: child.id, title: "Subtask" }] },
+      ]);
+
+      const nestedResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "Too deep",
+            parentTodoId: child.id,
+          }),
+        })
+      );
+      expect(nestedResponse.status).toBe(404);
+
+      const otherCookie = await createTestSession();
+      const otherList = await handleWithCookie(
+        new Request("http://localhost/todos"),
+        otherCookie
+      );
+      expect(await otherList.json()).toMatchObject([
+        { id: parent.id, subtasks: [{ id: child.id }] },
+      ]);
+    });
+
+    it("completes subtasks only when explicitly requested with the parent", async () => {
+      const parentResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Parent task" }),
+        })
+      );
+      const parent = await parentResponse.json();
+      const childResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "Subtask",
+            parentTodoId: parent.id,
+          }),
+        })
+      );
+      const child = await childResponse.json();
+
+      const completeResponse = await app.handle(
+        new Request(`http://localhost/todos/${parent.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ completed: true, completeSubtasks: true }),
+        })
+      );
+      expect(completeResponse.status).toBe(200);
+      const [storedChild] = await db
+        .select()
+        .from(todos)
+        .where(eq(todos.id, child.id));
+      expect(storedChild.completed).toBe(true);
+    });
+
+    it("deletes a parent's subtasks with the parent", async () => {
+      const parentResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Parent task" }),
+        })
+      );
+      const parent = await parentResponse.json();
+      const childResponse = await app.handle(
+        new Request("http://localhost/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "Subtask",
+            parentTodoId: parent.id,
+          }),
+        })
+      );
+      const child = await childResponse.json();
+
+      const deleteResponse = await app.handle(
+        new Request(`http://localhost/todos/${parent.id}`, {
+          method: "DELETE",
+        })
+      );
+      expect(deleteResponse.status).toBe(200);
+      const remaining = await db.select().from(todos);
+      expect(remaining.some((todo) => todo.id === child.id)).toBe(false);
     });
   });
 });

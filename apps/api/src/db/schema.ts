@@ -1,4 +1,5 @@
 import {
+  type AnySQLiteColumn,
   index,
   integer,
   sqliteTable,
@@ -60,11 +61,41 @@ export const todos = sqliteTable(
       onDelete: "set null",
     }),
     isShared: integer("is_shared", { mode: "boolean" }).notNull().default(false),
+    parentTodoId: integer("parent_todo_id").references((): AnySQLiteColumn => todos.id, {
+      onDelete: "cascade",
+    }),
     createdAt: text("created_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
   },
-  (table) => [index("todos_user_id_idx").on(table.userId)]
+  (table) => [
+    index("todos_user_id_idx").on(table.userId),
+    index("todos_parent_todo_id_idx").on(table.parentTodoId),
+  ]
+);
+
+export const todoComments = sqliteTable(
+  "todo_comments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    todoId: integer("todo_id")
+      .notNull()
+      .references(() => todos.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    index("todo_comments_todo_id_idx").on(table.todoId),
+    index("todo_comments_user_id_idx").on(table.userId),
+  ]
 );
 
 export type User = typeof users.$inferSelect;

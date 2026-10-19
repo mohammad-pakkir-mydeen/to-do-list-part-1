@@ -254,9 +254,21 @@ export function App() {
   };
 
   const handleToggleComplete = async (todo: TodoItem) => {
+    const completed = !todo.completed;
+    const pendingSubtaskCount = (todo.subtasks ?? []).filter(
+      (subtask) => !subtask.completed
+    ).length;
+    const completeSubtasks =
+      completed &&
+      pendingSubtaskCount > 0 &&
+      window.confirm(
+        `Complete the remaining ${pendingSubtaskCount} subtasks too?`
+      );
+
     try {
       const { error: apiError } = await api.todos({ id: todo.id }).patch({
-        completed: !todo.completed,
+        completed,
+        ...(completeSubtasks ? { completeSubtasks: true } : {}),
       });
 
       if (apiError) {
@@ -267,6 +279,24 @@ export function App() {
       fetchTodos();
     } catch {
       setError("Error updating todo.");
+    }
+  };
+
+  const handleCreateSubtask = async (parentId: number, title: string) => {
+    try {
+      const { error: apiError } = await api.todos.post({
+        title,
+        parentTodoId: parentId,
+      });
+      if (apiError) {
+        setError("Failed to create subtask.");
+        return false;
+      }
+      await fetchTodos();
+      return true;
+    } catch {
+      setError("Error creating subtask.");
+      return false;
     }
   };
 
@@ -328,8 +358,12 @@ export function App() {
     }
   };
 
-  const activeCount = todos.filter((t) => !t.completed).length;
-  const completedCount = todos.filter((t) => t.completed).length;
+  const visibleTodos = todos.flatMap((todo) => [
+    todo,
+    ...(todo.subtasks ?? []),
+  ]);
+  const activeCount = visibleTodos.filter((todo) => !todo.completed).length;
+  const completedCount = visibleTodos.filter((todo) => todo.completed).length;
 
   if (authLoading) {
     return <div className="loading-state auth-loading">Checking your session...</div>;
@@ -419,6 +453,7 @@ export function App() {
                   onSetSharing={handleSetTodoSharing}
                   onSaveEdit={handleSaveEdit}
                   onDelete={handleDeleteTodo}
+                  onCreateSubtask={handleCreateSubtask}
                 />
               ))}
             </ul>
