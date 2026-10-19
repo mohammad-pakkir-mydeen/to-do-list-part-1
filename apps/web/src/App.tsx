@@ -1,30 +1,46 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./lib/api";
-
-export type Filter = "all" | "active" | "completed";
-
-export interface TodoItem {
-  id: number;
-  title: string;
-  completed: boolean;
-  createdAt: string;
-}
+import type { Filter, ProjectItem, TodoItem } from "./types";
+import { ProjectSidebar } from "./components/ProjectSidebar";
+import { TodoItemRow } from "./components/TodoItemRow";
+import { TodoFooter } from "./components/TodoFooter";
+import { DeleteProjectModal } from "./components/DeleteProjectModal";
 
 export function App() {
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | "inbox" | "all">("all");
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [inputTitle, setInputTitle] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingTitle, setEditingTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingProject, setDeletingProject] = useState<ProjectItem | null>(null);
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error: apiError } = await api.projects.get();
+      if (!apiError && data) {
+        setProjects(data as ProjectItem[]);
+      }
+    } catch {
+      setError("Failed to load projects.");
+    }
+  };
 
   const fetchTodos = async () => {
     try {
       setLoading(true);
       setError(null);
+
+      const queryParams: { filter?: Filter; projectId?: string } = { filter };
+      if (selectedProjectId === "inbox") {
+        queryParams.projectId = "inbox";
+      } else if (typeof selectedProjectId === "number") {
+        queryParams.projectId = selectedProjectId.toString();
+      }
+
       const { data, error: apiError } = await api.todos.get({
-        query: { filter },
+        query: queryParams,
       });
 
       if (apiError) {
@@ -35,7 +51,7 @@ export function App() {
       if (data) {
         setTodos(data as TodoItem[]);
       }
-    } catch (err) {
+    } catch {
       setError("Cannot reach the backend API. Is it running?");
     } finally {
       setLoading(false);
@@ -43,8 +59,52 @@ export function App() {
   };
 
   useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  useEffect(() => {
     fetchTodos();
-  }, [filter]);
+  }, [filter, selectedProjectId]);
+
+  const handleCreateProject = async (name: string) => {
+    try {
+      const { data, error: apiError } = await api.projects.post({ name });
+      if (apiError) {
+        setError("Failed to create project.");
+        return;
+      }
+      if (data) {
+        await fetchProjects();
+        setSelectedProjectId((data as ProjectItem).id);
+      }
+    } catch {
+      setError("Error creating project.");
+    }
+  };
+
+  const handleDeleteProject = async (deleteTodos: boolean) => {
+    if (!deletingProject) return;
+
+    try {
+      const { error: apiError } = await api.projects({ id: deletingProject.id }).delete({
+        query: { deleteTodos: deleteTodos ? "true" : "false" },
+      });
+
+      if (apiError) {
+        setError("Failed to delete project.");
+        return;
+      }
+
+      setDeletingProject(null);
+      if (selectedProjectId === deletingProject.id) {
+        setSelectedProjectId("all");
+      }
+      await fetchProjects();
+      await fetchTodos();
+    } catch {
+      setError("Error deleting project.");
+    }
+  };
 
   const handleAddTodo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,9 +112,15 @@ export function App() {
     if (!trimmed) return;
 
     try {
-      const { data, error: apiError } = await api.todos.post({
+      const payload: { title: string; projectId?: number | null } = {
         title: trimmed,
-      });
+      };
+
+      if (typeof selectedProjectId === "number") {
+        payload.projectId = selectedProjectId;
+      }
+
+      const { data, error: apiError } = await api.todos.post(payload);
 
       if (apiError) {
         setError("Failed to create todo.");
@@ -87,21 +153,10 @@ export function App() {
     }
   };
 
-  const handleStartEdit = (todo: TodoItem) => {
-    setEditingId(todo.id);
-    setEditingTitle(todo.title);
-  };
-
-  const handleSaveEdit = async (id: number) => {
-    const trimmed = editingTitle.trim();
-    if (!trimmed) {
-      handleDeleteTodo(id);
-      return;
-    }
-
+  const handleSaveEdit = async (id: number, newTitle: string) => {
     try {
       const { error: apiError } = await api.todos({ id }).patch({
-        title: trimmed,
+        title: newTitle,
       });
 
       if (apiError) {
@@ -109,7 +164,6 @@ export function App() {
         return;
       }
 
-      setEditingId(null);
       fetchTodos();
     } catch {
       setError("Error saving edit.");
@@ -145,115 +199,79 @@ export function App() {
   const activeCount = todos.filter((t) => !t.completed).length;
   const completedCount = todos.filter((t) => t.completed).length;
 
+  const currentProjectName =
+    selectedProjectId === "all"
+      ? "All Tasks"
+      : selectedProjectId === "inbox"
+      ? "Inbox"
+      : projects.find((p) => p.id === selectedProjectId)?.name || "Project";
+
   return (
-    <div className="todo-app">
-      <header className="header">
-        <h1>todos</h1>
-        <form onSubmit={handleAddTodo}>
-          <input
-            className="new-todo"
-            placeholder="What needs to be done?"
-            value={inputTitle}
-            onChange={(e) => setInputTitle(e.target.value)}
-            autoFocus
-          />
-        </form>
-      </header>
+    <div className="layout">
+      <ProjectSidebar
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={setSelectedProjectId}
+        onCreateProject={handleCreateProject}
+        onDeleteProjectClick={setDeletingProject}
+      />
 
-      {error && <div className="error-banner">{error}</div>}
+      <main className="todo-app">
+        <header className="header">
+          <h1>{currentProjectName}</h1>
+          <form onSubmit={handleAddTodo}>
+            <input
+              className="new-todo"
+              placeholder={
+                typeof selectedProjectId === "number"
+                  ? `Add task to ${currentProjectName}...`
+                  : "What needs to be done?"
+              }
+              value={inputTitle}
+              onChange={(e) => setInputTitle(e.target.value)}
+              autoFocus
+            />
+          </form>
+        </header>
 
-      <main className="main">
-        {loading ? (
-          <div className="loading-state">Loading todos...</div>
-        ) : todos.length === 0 ? (
-          <div className="empty-state">No todos found.</div>
-        ) : (
-          <ul className="todo-list">
-            {todos.map((todo) => {
-              const isEditing = editingId === todo.id;
-              return (
-                <li
+        {error && <div className="error-banner">{error}</div>}
+
+        <section className="main">
+          {loading ? (
+            <div className="loading-state">Loading todos...</div>
+          ) : todos.length === 0 ? (
+            <div className="empty-state">No todos found.</div>
+          ) : (
+            <ul className="todo-list">
+              {todos.map((todo) => (
+                <TodoItemRow
                   key={todo.id}
-                  className={`${todo.completed ? "completed" : ""} ${
-                    isEditing ? "editing" : ""
-                  }`}
-                >
-                  {isEditing ? (
-                    <input
-                      className="edit"
-                      value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
-                      onBlur={() => handleSaveEdit(todo.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSaveEdit(todo.id);
-                        if (e.key === "Escape") setEditingId(null);
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <div className="view">
-                      <input
-                        className="toggle"
-                        type="checkbox"
-                        checked={todo.completed}
-                        onChange={() => handleToggleComplete(todo)}
-                      />
-                      <label onDoubleClick={() => handleStartEdit(todo)}>
-                        {todo.title}
-                      </label>
-                      <button
-                        className="destroy"
-                        onClick={() => handleDeleteTodo(todo.id)}
-                        aria-label="Delete todo"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                  todo={todo}
+                  onToggleComplete={handleToggleComplete}
+                  onSaveEdit={handleSaveEdit}
+                  onDelete={handleDeleteTodo}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <TodoFooter
+          activeCount={activeCount}
+          completedCount={completedCount}
+          filter={filter}
+          onFilterChange={setFilter}
+          onClearCompleted={handleClearCompleted}
+        />
       </main>
 
-      <footer className="footer">
-        <span className="todo-count">
-          <strong>{activeCount}</strong> {activeCount === 1 ? "item" : "items"} left
-        </span>
-        <ul className="filters">
-          <li>
-            <button
-              className={filter === "all" ? "selected" : ""}
-              onClick={() => setFilter("all")}
-            >
-              All
-            </button>
-          </li>
-          <li>
-            <button
-              className={filter === "active" ? "selected" : ""}
-              onClick={() => setFilter("active")}
-            >
-              Active
-            </button>
-          </li>
-          <li>
-            <button
-              className={filter === "completed" ? "selected" : ""}
-              onClick={() => setFilter("completed")}
-            >
-              Completed
-            </button>
-          </li>
-        </ul>
-        {completedCount > 0 && (
-          <button className="clear-completed" onClick={handleClearCompleted}>
-            Clear completed
-          </button>
-        )}
-      </footer>
+      {deletingProject && (
+        <DeleteProjectModal
+          project={deletingProject}
+          onConfirm={handleDeleteProject}
+          onCancel={() => setDeletingProject(null)}
+        />
+      )}
     </div>
   );
 }
-

@@ -13,28 +13,147 @@ body {
   padding: 40px 20px;
 }
 
-.todo-app {
-  background: #fff;
+.layout {
+  display: flex;
   width: 100%;
-  max-width: 550px;
+  max-width: 900px;
+  background: #fff;
   box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 25px 50px 0 rgba(0, 0, 0, 0.1);
+  min-height: 550px;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 240px;
+  background: #fafafa;
+  border-right: 1px solid #ededed;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 16px;
+}
+
+.project-list {
+  list-style: none;
+  flex: 1;
+}
+
+.project-list li {
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 15px;
+  color: #444;
+  margin-bottom: 4px;
+}
+
+.project-list li:hover {
+  background: #f0f0f0;
+}
+
+.project-list li.active {
+  background: #e8e8e8;
+  font-weight: 600;
+  color: #111;
+}
+
+.delete-proj-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.delete-proj-btn:hover {
+  color: #b83f45;
+}
+
+.add-project-btn {
+  background: none;
+  border: 1px dashed #ccc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #555;
+  text-align: center;
+  margin-top: 12px;
+}
+
+.add-project-btn:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
+.new-project-form input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-top: 12px;
+  outline: none;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.form-actions button {
+  flex: 1;
+  padding: 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  background: #fff;
+}
+
+.form-actions button[type="submit"] {
+  background: #b83f45;
+  color: #fff;
+  border-color: #b83f45;
+}
+
+/* Main Todo App */
+.todo-app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .header h1 {
-  font-size: 60px;
+  font-size: 40px;
   font-weight: 200;
   text-align: center;
   color: #b83f45;
-  margin: 10px 0;
+  margin: 16px 0 8px 0;
 }
 
 .new-todo, .edit {
   width: 100%;
   padding: 16px;
-  font-size: 20px;
+  font-size: 18px;
   border: none;
   border-bottom: 1px solid #ededed;
   outline: none;
+}
+
+.main {
+  flex: 1;
 }
 
 .todo-list {
@@ -42,7 +161,7 @@ body {
 }
 
 .todo-list li {
-  font-size: 20px;
+  font-size: 18px;
   border-bottom: 1px solid #ededed;
   display: flex;
   align-items: center;
@@ -56,16 +175,15 @@ body {
 }
 
 .todo-list li .toggle {
-  width: 24px;
-  height: 24px;
-  margin-right: 16px;
+  width: 22px;
+  height: 22px;
+  margin-right: 14px;
   cursor: pointer;
 }
 
 .todo-list li label {
   flex: 1;
   word-break: break-all;
-  transition: color 0.2s;
   cursor: pointer;
 }
 
@@ -78,7 +196,7 @@ body {
   background: none;
   border: none;
   color: #cc9a9a;
-  font-size: 24px;
+  font-size: 22px;
   cursor: pointer;
   padding: 0 8px;
 }
@@ -142,3 +260,67 @@ body {
   border-bottom: 1px solid #ffbaba;
 }
 
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.modal h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: #222;
+}
+
+.modal p {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-actions button {
+  padding: 10px 14px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-weight: 500;
+}
+
+.btn-danger {
+  background: #d8000c;
+  color: #fff;
+}
+
+.btn-warning {
+  background: #f0ad4e;
+  color: #fff;
+}
+
+.btn-cancel {
+  background: #e0e0e0;
+  color: #333;
+}
