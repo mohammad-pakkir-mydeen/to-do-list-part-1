@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { todosRoutes } from "./routes/todos";
+import { projectsRoutes } from "./routes/projects";
 
 export const app = new Elysia()
   .use(cors())
@@ -11,5 +12,7 @@ export const app = new Elysia()
     }
   })
   .get("/health", () => ({ status: "ok" }))
-  .use(todosRoutes);
+  .use(todosRoutes)
+  .use(projectsRoutes);
+
 
